@@ -1,9 +1,6 @@
-from mp_gail import gail
-from env import timegeo_env
-import yaml
+from models.mp_gail import gail
+from env.env import timegeo_env
 import numpy as np
-import os
-import torch.multiprocessing as mp
 if __name__ == '__main__':
     #mp.set_start_method('spawn')
     env = timegeo_env()
