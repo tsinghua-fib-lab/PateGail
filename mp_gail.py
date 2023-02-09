@@ -343,13 +343,10 @@ class gail(object):
     #     self.eval_test(1)
 
     def run(self):
-        setproctitle.setproctitle('mp_gail@gaochangzheng')
-        #mp.set_start_method('spawn')
-        #print(self)
         reward_input_dict=dict()
         buffer_input_dict=dict()
         buffer_count = 0 
-        for i in range(5005):
+        for i in range(50005):
             t1=tm.time()
             pos, time, history_pos, home_point, pre_pos_count, stay_time = self.env.reset()
             total_custom_reward = 0
