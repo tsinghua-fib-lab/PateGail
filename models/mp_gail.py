@@ -12,10 +12,9 @@ import os
 import setproctitle
 import time as tm
 from torch.multiprocessing import Process, Manager,Pool
-from torch.nn import DataParallel
 import torch.multiprocessing as mp
 from tqdm import tqdm
-os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 class gail(object):
     def __init__(self, env, file, config_path='./config/config.yaml', eval=False):
         f = open(config_path)
@@ -38,9 +37,9 @@ class gail(object):
         self.train_iter = self.config['train_iter']
         self.clip_grad = self.config['clip_grad']
         self.file = file
-        self.alpha = 10**0.5
-        #self.alpha = 3
-        self.beta = 50
+        self.alpha = 50
+        self.beta = 0.01
+        self.noise = 0.01
         self.action_dim = 4
         self.total_locations = self.config['total_locations']
         self.time_scale = self.config['time_scale']
@@ -57,7 +56,7 @@ class gail(object):
         self.act_embedding_dim = self.config['act_embedding_dim']
         self.device =1
         self.model_save_interval = self.config['model_save_interval']
-        self.eval = False
+        self.eval = eval
         self.test_data_path = self.config['test_data_path']
         self.test_data = np.loadtxt(self.test_data_path)
         self.pre_pos_count_embedding_dim=8
@@ -100,7 +99,7 @@ class gail(object):
             return_prob=False
         ).cuda()
         self.discriminator = []
-        for i in range(len(self.file)):
+        for _ in range(len(self.file)):
             model = Discriminator(
             self.total_locations,
             self.time_scale,
@@ -111,7 +110,6 @@ class gail(object):
             self.act_embedding_dim,
             self.hidden_dim)
             self.discriminator.append(model)
-        self.descri_queue = Manager().Queue()
         self.buffer = replay_buffer(self.capacity, self.gamma, self.lam)
         self.policy_optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=0.001, weight_decay=1e-5)
         self.value_optimizer = torch.optim.Adam(self.value_net.parameters(), lr=0.001, weight_decay=1e-5)
@@ -120,8 +118,6 @@ class gail(object):
             self.discriminator_optimizer.append(torch.optim.Adam(self.discriminator[i].parameters(), lr=0.001))
         #loss
         self.disc_loss_func = nn.BCELoss()
-        self.weight_custom_reward = None
-
         if self.eval:
             self.policy_net.load_state_dict(torch.load('./results/models_{}_{}/policy_net.pkl'.format(str(self.alpha),str(self.beta))))
             self.value_net.load_state_dict(torch.load('./results/models_{}_{}/value_net.pkl'.format(str(self.alpha),str(self.beta))))
@@ -129,32 +125,17 @@ class gail(object):
                 self.discriminator[i].load_state_dict(torch.load(f'./results/models_{self.alpha}_{self.beta}/discriminator_{i}.pth'))
 
 
-    def return_dis(self):
-        model11 = Discriminator(
-            self.total_locations,
-            self.time_scale,
-            self.loc_embedding_dim,
-            self.tim_embedding_dim,
-            self.pre_pos_count_embedding_dim,
-            self.stay_time_embedding_dim,
-            self.act_embedding_dim,
-            self.hidden_dim)
-        return model11
 
     def sample_real_data(self, user_id):
-        #total_track_num = (num2 - num1) * (self.file[user_id].shape[1] - 1)
         total_track_num = self.file[user_id].shape[0]*(self.file[user_id].shape[1]-1)
         sample_index = list(np.random.choice(total_track_num, self.batch_size))
-        #sample_index = [(x // (self.file.shape[1] - 1) + num1, x % (self.file.shape[1] - 1)) for x in sample_index]
         sample_index = [(x // (self.file[user_id].shape[1] - 1), x % (self.file[user_id].shape[1] - 1)) for x in sample_index]
         time = [index[1] for index in sample_index]
-        #print(index)
         pos = [self.file[user_id][index] for index in sample_index]
         next_pos = [self.file[user_id][index[0], index[1] + 1] for index in sample_index]
         history_pos = [list(self.file[user_id][index[0], :index[1] + 1]) for index in sample_index]
         pre_pos_count = [len(list(set(hp))) for hp in history_pos]
         stay_time = []
-        
         for i in range(self.batch_size):
             st = 0
             for p in reversed(history_pos[i]):
@@ -163,9 +144,7 @@ class gail(object):
                 else:
                     break
             stay_time.append(st)
-
         home_pos = [self.file[user_id][index[0], 0] for index in sample_index]
-
         action = []
         for i in range(self.batch_size):
             if next_pos[i] == pos[i]:
@@ -211,12 +190,14 @@ class gail(object):
             surr1 = ratio * advantages
             surr2 = torch.clamp(ratio, 1. - self.epsilon, 1. + self.epsilon) * advantages
             policy_loss = - torch.min(surr1, surr2) - self.entropy_weight * entropy
-            #policy_loss = -surr1 - self.entropy_weight * entropy
             policy_loss = policy_loss.mean()
             self.policy_optimizer.zero_grad()
             policy_loss.backward(retain_graph=True)
             torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), self.clip_grad)
             self.policy_optimizer.step()
+            
+            
+            
     def get_sample_data(self):
         dis_sample={}
         buffer_sample={}
@@ -262,36 +243,18 @@ class gail(object):
         self.discriminator = [self.discriminator[i].cpu() for i in range(len(self.file))]
         
         
-    def one_reward(self,descri_queue,data_list,reward_input_dict,result_queue):
+    def one_reward(self, data_list, reward_input_dict, result_queue):
         all_result=[]
         for i in data_list:
             (pos, time, action, pre_pos_count, stay_time) = reward_input_dict[i]
-            d_reward = 0
+            total_reward = 0
             for j in range(len(self.file)):
-                d_reward += self.discriminator[j].forward(pos, time, action, pre_pos_count, stay_time)
-            reward = d_reward/len(self.file)
-            reward = -reward.log()
-            d = []
-            if self.alpha == 0:
-                log_reward = reward
-            else:
-                # neps = 1/(self.alpha*len(self.file)) 
-                # noise = torch.tensor(np.random.laplace(0,neps,1)[0],dtype=torch.float)
-            # reward = reward + noise
-                for _ in range(200):
-                    sample_result = random.sample(list(range(0,len(self.file))),self.beta)
-                    outputs = []
-                    for u in sample_result:
-                        output = self.discriminator[u].forward(pos, time, action, pre_pos_count, stay_time)
-                        outputs.append(output.item())
-                    d.append(np.mean(outputs))
-                d = -np.log(np.array(d))
-                log_reward = reward - self.alpha*torch.tensor(np.std(d))
-            # a = torch.zeros((1,2))
-            # a[0,0] = reward
-            # a[0,1] = 1-reward
-            # reward = F.softmax(a,dim=1)[0,0]
-            # log_reward = - reward.log().detach().item()
+                total_reward += self.discriminator[j].forward(pos, time, action, pre_pos_count, stay_time)
+            reward = total_reward/len(self.file) + torch.from_numpy(np.random.laplace(0, self.noise, 1))
+            sample_result = random.sample(list(range(0,len(self.file))),self.beta)
+            outputs = [self.discriminator[u].forward(pos, time, action, pre_pos_count, stay_time).item() for u in sample_result]
+            reward = reward - self.beta * torch.tensor(np.std(outputs))
+            log_reward = - reward.log()
             all_result.append(log_reward.detach().item())
         result_queue.put(all_result)
 
@@ -339,15 +302,12 @@ class gail(object):
                     break
         np.save('./results/eval_{}_{}/eval_{}.npy'.format(str(self.alpha),str(self.beta),str(index)), result.astype(np.int))
 
-    # def run(self):
-    #     self.eval_test(1)
 
     def run(self):
         reward_input_dict=dict()
         buffer_input_dict=dict()
         buffer_count = 0 
         for i in range(50005):
-            t1=tm.time()
             pos, time, history_pos, home_point, pre_pos_count, stay_time = self.env.reset()
             total_custom_reward = 0
             while True:
@@ -360,10 +320,7 @@ class gail(object):
                                                 torch.LongTensor([pre_pos_count]).cpu(),
                                                 torch.LongTensor([stay_time]).cpu())
                 buffer_input_dict[buffer_count]=(pos, time, history_pos, home_point, pre_pos_count, stay_time, action,done, value)
-                #custom_reward = self.get_reward(pos, time, action, next_pre_pos_count, next_stay_time)
-                #self.buffer.store(pos, time, history_pos, home_point, pre_pos_count, stay_time, action, custom_reward, done, value)
-                #total_custom_reward += custom_reward
-                buffer_count+=1
+                buffer_count += 1
                 pos = next_pos
                 time = next_time
                 history_pos = next_history_pos
@@ -373,7 +330,6 @@ class gail(object):
                 if done:
                     if buffer_count >= self.train_iter:
                         reward_list= self.get_reward(reward_input_dict)
-                        print(len(reward_list))
                         self.get_buffer(reward_list,buffer_input_dict)
                         total_custom_reward = reward_list[-1]
                         self.buffer.process()
