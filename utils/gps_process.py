@@ -18,8 +18,8 @@ def calc_rank_matrix(gps_info, start_idx, end_idx):
 if __name__ == '__main__':
     data = 'geolife'
     os.makedirs('../preprocess_data/{}'.format(data), exist_ok=True)
-    gps_info = np.loadtxt('../raw_data/{}/gps'.format(data))
-    track_data = np.loadtxt('../raw_data/{}/real.data'.format(data))
+    gps_info = np.loadtxt('../dataset/{}/gps'.format(data))
+    track_data = np.loadtxt('../dataset/{}/real.data'.format(data))
     process_num = 55
     index_list = np.linspace(0, len(gps_info), process_num).astype(int)
     for i in range(len(gps_info)):

@@ -1,8 +1,6 @@
 ﻿# encoding: utf-8
 
 import os
-import matplotlib.pyplot as plt 
-
 import shutil
 import argparse
 import setproctitle
@@ -10,8 +8,8 @@ import scipy.stats
 import numpy as np
 from collections import Counter
 from math import radians, cos, sin, asin, sqrt
-from utils import get_gps, read_data_from_file, read_logs_from_file
-
+from util import get_gps, read_data_from_file, read_logs_from_file
+import glob
 
 def geodistance(lng1,lat1,lng2,lat2):
     #lng1,lat1,lng2,lat2 = (120.12802999999997,30.28708,115.86572000000001,28.7427)
@@ -111,11 +109,11 @@ class IndividualEval(object):
 
     def __init__(self, data):
         if data == 'mobile':       
-            self.X, self.Y = get_gps('raw_data/mobile/gps')
+            self.X, self.Y = get_gps('dataset/mobile/gps')
             self.max_locs = 8606
             self.max_distance = 2.088
         elif data == 'geolife':
-            self.X, self.Y = get_gps('raw_data/geolife/gps')
+            self.X, self.Y = get_gps('../dataset/geolife/gps')
             self.max_locs = 4210
             self.max_distance = 6.886
    
@@ -498,9 +496,9 @@ def evaluate(datasets, gene_data):
         individualEval = IndividualEval(data='geolife')
         # start_point = np.load('../data/geolife/start.npy')    
     
-    test_data = read_data_from_file('raw_data/%s/test.data' % opt.datasets)
+    test_data = read_data_from_file('../dataset/%s/test.data' % opt.datasets)
     
-    base = read_data_from_file('raw_data/%s/test.data' % opt.datasets)
+    base = read_data_from_file('../dataset/%s/test.data' % opt.datasets)
     #print(test_data[1])
     #print(gene_data[1])
     test_data = test_data
@@ -519,17 +517,23 @@ if __name__ == "__main__":
         max_locs = 4210
     else:
         max_locs = 8606
-    print(max_locs)
-    # gene_data = np.load('./results/eval_3.1_50/eval_1.npy')
-    # print(gene_data.shape)
-    # evaluate(opt.datasets, gene_data)
-    import glob
-    files = glob.glob('./eval*/')
-    for file in files:
-        dd = glob.glob(file+'*.npy')
-        if dd:
-            for ff in dd:
-                gene_data = np.load(ff)
-                evaluate(opt.datasets, gene_data)
-            print(f'file_from:{dd}', '----------------------------------')
+    results = glob.glob('../results/result_50_0.01/evals/eval_*.txt')
+    s_result = sorted(results, key=lambda x:int(x.split('/')[-1].split('_')[1].split('.')[0]))
+    for result in s_result:
+        gene_data = np.loadtxt(result).astype(int)
+        evaluate(opt.datasets, gene_data)
+        print(result)
+    # print(max_locs)
+    # # gene_data = np.load('./results/eval_3.1_50/eval_1.npy')
+    # # print(gene_data.shape)
+    # # evaluate(opt.datasets, gene_data)
+    # import glob
+    # files = glob.glob('./eval*/')
+    # for file in files:
+    #     dd = glob.glob(file+'*.npy')
+    #     if dd:
+    #         for ff in dd:
+    #             gene_data = np.load(ff)
+    #             evaluate(opt.datasets, gene_data)
+    #         print(f'file_from:{dd}', '----------------------------------')
     #evaluate(opt.datasets, gene_data)

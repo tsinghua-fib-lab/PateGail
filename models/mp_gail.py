@@ -61,9 +61,9 @@ class gail(object):
         self.test_data = np.loadtxt(self.test_data_path)
         self.pre_pos_count_embedding_dim=8
         self.stay_time_embedding_dim=8
-        
-        os.makedirs('./results/models_{}_{}/'.format(str(self.alpha),str(self.beta)), exist_ok=True)
-        os.makedirs('./results/eval_{}_{}/'.format(str(self.alpha),str(self.beta)), exist_ok=True)
+        self.process_num = 45
+        os.makedirs('./results/result_{}_{}/'.format(str(self.alpha),str(self.beta)), exist_ok=True)
+        os.makedirs('./results/result_{}_{}/evals/'.format(str(self.alpha),str(self.beta)), exist_ok=True)
         
         self.policy_net = ATNetwork(
             self.total_locations,
@@ -119,10 +119,10 @@ class gail(object):
         #loss
         self.disc_loss_func = nn.BCELoss()
         if self.eval:
-            self.policy_net.load_state_dict(torch.load('./results/models_{}_{}/policy_net.pkl'.format(str(self.alpha),str(self.beta))))
-            self.value_net.load_state_dict(torch.load('./results/models_{}_{}/value_net.pkl'.format(str(self.alpha),str(self.beta))))
+            self.policy_net.load_state_dict(torch.load(f'./results/result_{self.alpha}_{self.beta}/models_{1}/policy_net.pkl'))
+            self.value_net.load_state_dict(torch.load(f'./results/result_{self.alpha}_{self.beta}/models_{1}/policy_net.pkl'))
             for i in range(len(self.file)):
-                self.discriminator[i].load_state_dict(torch.load(f'./results/models_{self.alpha}_{self.beta}/discriminator_{i}.pth'))
+                self.discriminator[i].load_state_dict(torch.load(f'./results/result_{self.alpha}_{self.beta}/models_{1}/discriminator_{i}.pth'))
 
 
 
@@ -244,43 +244,48 @@ class gail(object):
         
         
     def one_reward(self, data_list, reward_input_dict, result_queue):
-        all_result=[]
+        all_result={}
         for i in data_list:
             (pos, time, action, pre_pos_count, stay_time) = reward_input_dict[i]
             total_reward = 0
             for j in range(len(self.file)):
                 total_reward += self.discriminator[j].forward(pos, time, action, pre_pos_count, stay_time)
             reward = total_reward/len(self.file) + torch.from_numpy(np.random.laplace(0, self.noise, 1))
-            sample_result = random.sample(list(range(0,len(self.file))),self.beta)
-            outputs = [self.discriminator[u].forward(pos, time, action, pre_pos_count, stay_time).item() for u in sample_result]
-            reward = reward - self.beta * torch.tensor(np.std(outputs))
+            mean_std =  []
+            for _ in range(200):
+                sample_result = random.sample(list(range(0,len(self.file))),self.alpha)
+                outputs = [self.discriminator[u].forward(pos, time, action, pre_pos_count, stay_time).item() for u in sample_result]
+                mean_std.append(outputs)
+            value_c = (np.abs(np.random.laplace(0, self.noise*2, 1) + np.var(mean_std)))**0.5
+            reward = reward - self.beta * torch.from_numpy(value_c)
             log_reward = - reward.log()
-            all_result.append(log_reward.detach().item())
+            all_result[i] = log_reward.detach().item()
         result_queue.put(all_result)
 
     def get_reward(self,reward_input_dict):
-        iter_list = np.arange(140).reshape(14,-1).tolist()
-        iter_list[-1].append(140)
+        length = len(reward_input_dict)
+        iter_list = np.arange(length-length%self.process_num).reshape(self.process_num,-1).tolist()
+        iter_list[-1].extend(np.arange(length-length%self.process_num,length).tolist())
         result_queue = Manager().Queue()
-        #iter_list = np.arange(1000).reshape(2,-1).tolist()
-        reward_list = []
+        reward_dict = {}
         processes = list()
-        for i in range(14):
-            p = Process(target=self.one_reward, args=(self.descri_queue,iter_list[i],reward_input_dict,result_queue))
+        for i in range(self.process_num):
+            p = Process(target=self.one_reward, args=(iter_list[i],reward_input_dict,result_queue))
             p.start()
             processes.append(p)
         for p in processes:
             p.join()
         for i in range(result_queue.qsize()):
-            reward_list.extend(result_queue.get())
-        return reward_list
+            reward_dict.update(result_queue.get())
+        return reward_dict
 
-    def get_buffer(self,reward_list,buffer_input_dict):
+    def get_buffer(self,reward_dict,buffer_input_dict):
         for i in buffer_input_dict:
             (pos, time, history_pos, home_point, pre_pos_count, stay_time, action, done, value)=buffer_input_dict[i]
-            custom_reward = reward_list[i]
+            custom_reward = reward_dict[i]
             self.buffer.store(pos, time, history_pos, home_point, pre_pos_count, stay_time, action, custom_reward, done, value)
-
+        
+        
     def eval_test(self, index):
         result = np.zeros_like(self.test_data)
         for i in tqdm(range(len(self.test_data))):
@@ -300,16 +305,18 @@ class gail(object):
                 t = next_t
                 if done:
                     break
-        np.save('./results/eval_{}_{}/eval_{}.npy'.format(str(self.alpha),str(self.beta),str(index)), result.astype(np.int))
+        np.savetxt(f'./results/result_{self.alpha}_{self.beta}/evals/eval_{index}.txt',result, fmt = '%d')
 
-
+    def eval_data(self):
+        self.eval_test(1)
+        
     def run(self):
+        setproctitle.setproctitle('gail@gaochangzheng')
         reward_input_dict=dict()
         buffer_input_dict=dict()
         buffer_count = 0 
         for i in range(50005):
             pos, time, history_pos, home_point, pre_pos_count, stay_time = self.env.reset()
-            total_custom_reward = 0
             while True:
                 action = self.policy_net.act(torch.LongTensor(np.expand_dims(pos, 0)).cuda(), torch.LongTensor(np.expand_dims(time, 0)).cuda(), torch.LongTensor(np.expand_dims(pre_pos_count, 0)).cuda(), torch.LongTensor(np.expand_dims(stay_time, 0)).cuda())
                 next_pos, next_time, done, next_history_pos, next_home_point, next_pre_pos_count, next_stay_time= self.env.step(action, history_pos, home_point)
@@ -329,9 +336,8 @@ class gail(object):
                 stay_time = next_stay_time
                 if done:
                     if buffer_count >= self.train_iter:
-                        reward_list= self.get_reward(reward_input_dict)
-                        self.get_buffer(reward_list,buffer_input_dict)
-                        total_custom_reward = reward_list[-1]
+                        rewards1= self.get_reward(reward_input_dict)
+                        self.get_buffer(rewards1,buffer_input_dict)
                         self.buffer.process()
                         self.discriminator_train()
                         self.ppo_train()
@@ -339,12 +345,15 @@ class gail(object):
                         buffer_count = 0
                         reward_input_dict.clear()
                         buffer_input_dict.clear()
-                    print('episode: {}'.format(i + 1))
+                        total_reward = sum([rewards1[i] for i in range(94,141)])
+                        print('episode: {}'.format(i + 1), 'total_reward', total_reward)
                     break
 
             if (i + 1) % self.model_save_interval == 0:
-                torch.save(self.policy_net.state_dict(), './results/models_{}_{}/policy_net.pkl'.format(str(self.alpha),str(self.beta)))
-                torch.save(self.value_net.state_dict(), './results/models_{}_{}/value_net.pkl'.format(str(self.alpha),str(self.beta)))
+                save_index = (i + 1) // self.model_save_interval
+                os.makedirs(f'./results/result_{self.alpha}_{self.beta}/models_{save_index}', exist_ok=True)
+                torch.save(self.policy_net.state_dict(), f'./results/result_{self.alpha}_{self.beta}/models_{save_index}/policy_net.pkl')
+                torch.save(self.value_net.state_dict(), f'./results/result_{self.alpha}_{self.beta}/models_{save_index}/value_net.pkl')
                 for idx, item in enumerate(self.discriminator):
-                    torch.save(item.state_dict(), './results/models_{}_{}/discriminator_{}.pth'.format(str(self.alpha),str(self.beta),str(idx)))
-                self.eval_test((i + 1) // self.model_save_interval)
+                    torch.save(item.state_dict(), f'./results/result_{self.alpha}_{self.beta}/models_{save_index}/discriminator_{idx}.pth')
+                self.eval_test(save_index)

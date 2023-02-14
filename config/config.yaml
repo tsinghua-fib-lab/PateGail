@@ -2,7 +2,7 @@
 # ENV
 alpha: 0.60
 rank_path: './preprocess_data/geolife/rank_list.npy'
-track_path: './raw_data/real.data'
+track_path: './dataset/geolife/real.data'
 max_closest_rank: 200
 traj_length: 48
 
@@ -41,5 +41,5 @@ act_embedding_dim: 4
 recover_cnn_reward_ratio: 0.5
 recover_cnn_learning_rate: 0.0003
 
-model_save_interval: 1000
-test_data_path: './dataset/test.data'
+model_save_interval: 100
+test_data_path: './dataset/geolife/test.data'

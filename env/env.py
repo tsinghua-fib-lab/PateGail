@@ -55,7 +55,7 @@ class timegeo_env(object):
         self.current_pos = self.start_pos[self.count // (self.traj_length - 1)][self.t]
         '''
         self.t = 0
-        if self.count == 3000:
+        if self.count >= 5610:
             self.count = 0
         self.history_pos = list(self.track_data[self.count, :1])
         self.current_pos = self.start_pos[self.count][0]

@@ -1,2 +1,4 @@
 /results
 /preprocess_data
+*.pyc
+*.npy
