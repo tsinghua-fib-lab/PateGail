@@ -2,3 +2,6 @@
 /preprocess_data
 *.pyc
 *.npy
+*.pkl
+*.ipynb
+pre*

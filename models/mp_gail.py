@@ -1,6 +1,4 @@
 
-from models.replay_buffer import replay_buffer
-from models.net import ATNetwork, Discriminator
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -14,9 +12,24 @@ import time as tm
 from torch.multiprocessing import Process, Manager,Pool
 import torch.multiprocessing as mp
 from tqdm import tqdm
+from models.replay_buffer import replay_buffer
+from models.net import ATNetwork, Discriminator
 os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+
+
+def set_seed(seed):
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    # some cudnn methods can be random even after fixing the seed
+    # unless you tell it to be deterministic
+    torch.backends.cudnn.deterministic = True
+
+
 class gail(object):
-    def __init__(self, env, file, config_path='./config/config.yaml', eval=False):
+    def __init__(self, env, file, seed, beta, noise, config_path='./config/config.yaml', eval=False):
         f = open(config_path)
         assert type(file) == dict
         self.config = yaml.load(f)
@@ -38,8 +51,8 @@ class gail(object):
         self.clip_grad = self.config['clip_grad']
         self.file = file
         self.alpha = 50
-        self.beta = 0.01
-        self.noise = 0.01
+        self.beta = beta
+        self.noise = noise
         self.action_dim = 4
         self.total_locations = self.config['total_locations']
         self.time_scale = self.config['time_scale']
@@ -62,9 +75,10 @@ class gail(object):
         self.pre_pos_count_embedding_dim=8
         self.stay_time_embedding_dim=8
         self.process_num = 45
-        os.makedirs('./results/result_{}_{}/'.format(str(self.alpha),str(self.beta)), exist_ok=True)
-        os.makedirs('./results/result_{}_{}/evals/'.format(str(self.alpha),str(self.beta)), exist_ok=True)
-        
+        self.seed = seed
+        os.makedirs(f'./results/result_{self.seed}_{self.alpha}_{self.beta}/', exist_ok=True)
+        os.makedirs(f'./results/result_{self.seed}_{self.alpha}_{self.beta}/evals/', exist_ok=True)
+          
         self.policy_net = ATNetwork(
             self.total_locations,
             self.time_scale,
@@ -119,10 +133,10 @@ class gail(object):
         #loss
         self.disc_loss_func = nn.BCELoss()
         if self.eval:
-            self.policy_net.load_state_dict(torch.load(f'./results/result_{self.alpha}_{self.beta}/models_{1}/policy_net.pkl'))
-            self.value_net.load_state_dict(torch.load(f'./results/result_{self.alpha}_{self.beta}/models_{1}/policy_net.pkl'))
+            self.policy_net.load_state_dict(torch.load(f'./results/result_{self.seed}{self.alpha}_{self.beta}/models_{1}/policy_net.pkl'))
+            self.value_net.load_state_dict(torch.load(f'./results/result_{self.seed}_{self.alpha}_{self.beta}/models_{1}/policy_net.pkl'))
             for i in range(len(self.file)):
-                self.discriminator[i].load_state_dict(torch.load(f'./results/result_{self.alpha}_{self.beta}/models_{1}/discriminator_{i}.pth'))
+                self.discriminator[i].load_state_dict(torch.load(f'./results/result_{self.seed}_{self.alpha}_{self.beta}/models_{1}/discriminator_{i}.pth'))
 
 
 
@@ -305,17 +319,18 @@ class gail(object):
                 t = next_t
                 if done:
                     break
-        np.savetxt(f'./results/result_{self.alpha}_{self.beta}/evals/eval_{index}.txt',result, fmt = '%d')
+        np.savetxt(f'./results/result_{self.seed}_{self.alpha}_{self.beta}/evals/eval_{index}.txt',result, fmt = '%d')
 
     def eval_data(self):
         self.eval_test(1)
         
     def run(self):
-        setproctitle.setproctitle('gail@gaochangzheng')
+        # setproctitle.setproctitle('gail@gaochangzheng')
+        set_seed(self.seed)
         reward_input_dict=dict()
         buffer_input_dict=dict()
         buffer_count = 0 
-        for i in range(50005):
+        for i in range(self.episode):
             pos, time, history_pos, home_point, pre_pos_count, stay_time = self.env.reset()
             while True:
                 action = self.policy_net.act(torch.LongTensor(np.expand_dims(pos, 0)).cuda(), torch.LongTensor(np.expand_dims(time, 0)).cuda(), torch.LongTensor(np.expand_dims(pre_pos_count, 0)).cuda(), torch.LongTensor(np.expand_dims(stay_time, 0)).cuda())
@@ -351,9 +366,9 @@ class gail(object):
 
             if (i + 1) % self.model_save_interval == 0:
                 save_index = (i + 1) // self.model_save_interval
-                os.makedirs(f'./results/result_{self.alpha}_{self.beta}/models_{save_index}', exist_ok=True)
-                torch.save(self.policy_net.state_dict(), f'./results/result_{self.alpha}_{self.beta}/models_{save_index}/policy_net.pkl')
-                torch.save(self.value_net.state_dict(), f'./results/result_{self.alpha}_{self.beta}/models_{save_index}/value_net.pkl')
+                os.makedirs(f'./results/result_{self.seed}_{self.alpha}_{self.beta}/models_{save_index}', exist_ok=True)
+                torch.save(self.policy_net.state_dict(), f'./results/result_{self.seed}_{self.alpha}_{self.beta}/models_{save_index}/policy_net.pkl')
+                torch.save(self.value_net.state_dict(), f'./results/result_{self.seed}_{self.alpha}_{self.beta}/models_{save_index}/value_net.pkl')
                 for idx, item in enumerate(self.discriminator):
-                    torch.save(item.state_dict(), f'./results/result_{self.alpha}_{self.beta}/models_{save_index}/discriminator_{idx}.pth')
+                    torch.save(item.state_dict(), f'./results/result_{self.seed}_{self.alpha}_{self.beta}/models_{save_index}/discriminator_{idx}.pth')
                 self.eval_test(save_index)

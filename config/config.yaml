@@ -7,7 +7,7 @@ max_closest_rank: 200
 traj_length: 48
 
 # PPO
-episode: 1000000
+episode: 500
 capacity: 1000
 gamma: 0.99
 lam: 0.95
@@ -41,5 +41,5 @@ act_embedding_dim: 4
 recover_cnn_reward_ratio: 0.5
 recover_cnn_learning_rate: 0.0003
 
-model_save_interval: 100
+model_save_interval: 10
 test_data_path: './dataset/geolife/test.data'

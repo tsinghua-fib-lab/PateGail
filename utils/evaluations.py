@@ -3,7 +3,6 @@
 import os
 import shutil
 import argparse
-import setproctitle
 import scipy.stats
 import numpy as np
 from collections import Counter
@@ -22,11 +21,11 @@ def geodistance(lng1,lat1,lng2,lat2):
     return distance
 
 
+
 class EvalUtils(object):
     """
     some commonly-used evaluation tools and functions
     """
-
     @staticmethod
     def filter_zero(arr):
         """
@@ -97,8 +96,8 @@ class EvalUtils(object):
         :return:
         """
         # normalize
-        p1 = p1 / p1.sum()
-        p2 = p2 / p2.sum()
+        p1 = (p1 / (p1.sum()+1e-10))+1e-10
+        p2 = (p2 / (p2.sum()+1e-10))+1e-10
         m = (p1 + p2) / 2
         js = 0.5 * scipy.stats.entropy(p1, m) + \
             0.5 * scipy.stats.entropy(p2, m)
@@ -414,18 +413,10 @@ class IndividualEval(object):
         f2 = self.get_overall_topk_visits_freq(t2, 20)
         f3 = self.get_overall_topk_visits_freq(t3, 20)
         f_jsd = EvalUtils.get_js_divergence(f1, f2)
-        np.save('d1_dist.npy',f1)
-        np.save('d2_dist.npy',f2)
+        # np.save('d1_dist.npy',f1)
+        # np.save('d2_dist.npy',f2)
         du3_dist, _ = EvalUtils.arr_to_distribution(du1, 1, 49, 48)
-        np.save('d3_dist.npy',f3)
-        '''
-        plt.plot( range(len(f1[0:7])), f1[0:7]/sum(f1[0:7]),'-^', color="blue")
-        plt.plot( range(len(f2[0:7])), f2[0:7]/sum(f2[0:7]),'-^', color="red")
-        plt.plot(range(len(f3[0:7])), f3[0:7]/sum(f3[0:7]), '-^', color='green')
-        plt.xlabel('I-rank,rank')
-        plt.ylabel('P')
-        plt.savefig('Irank.png')
-        '''
+        # np.save('d3_dist.npy',f3)
         print('distance:',d_jsd,'radius:', g_jsd,'daily-loc:',p_jsd,'duration:', du_jsd ,'irank:', f_jsd,'grank:',l_jsd)
         return d_jsd, p_jsd, g_jsd, l_jsd, f_jsd, du_jsd, a_jsd
 
@@ -499,11 +490,7 @@ def evaluate(datasets, gene_data):
     test_data = read_data_from_file('../dataset/%s/test.data' % opt.datasets)
     
     base = read_data_from_file('../dataset/%s/test.data' % opt.datasets)
-    #print(test_data[1])
-    #print(gene_data[1])
-    test_data = test_data
-    print(test_data.shape)
-    print(individualEval.get_individual_jsds(test_data,gene_data, base))
+    individualEval.get_individual_jsds(test_data,gene_data, base)
     
 
 if __name__ == "__main__":
@@ -517,7 +504,7 @@ if __name__ == "__main__":
         max_locs = 4210
     else:
         max_locs = 8606
-    results = glob.glob('../results/result_50_0.01/evals/eval_*.txt')
+    results = glob.glob('../results/result_9999_50_0.01/evals/eval_*.txt')
     s_result = sorted(results, key=lambda x:int(x.split('/')[-1].split('_')[1].split('.')[0]))
     for result in s_result:
         gene_data = np.loadtxt(result).astype(int)
