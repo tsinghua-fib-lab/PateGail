@@ -14,7 +14,7 @@ import torch.multiprocessing as mp
 from tqdm import tqdm
 from models.replay_buffer import replay_buffer
 from models.net import ATNetwork, Discriminator
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 
 def set_seed(seed):
@@ -76,8 +76,8 @@ class gail(object):
         self.stay_time_embedding_dim=8
         self.process_num = 45
         self.seed = seed
-        os.makedirs(f'./results/result_{self.seed}_{self.alpha}_{self.beta}/', exist_ok=True)
-        os.makedirs(f'./results/result_{self.seed}_{self.alpha}_{self.beta}/evals/', exist_ok=True)
+        os.makedirs(f'./results/result_{self.seed}_{self.noise}_{self.beta}/', exist_ok=True)
+        os.makedirs(f'./results/result_{self.seed}_{self.noise}_{self.beta}/evals/', exist_ok=True)
           
         self.policy_net = ATNetwork(
             self.total_locations,
@@ -133,10 +133,10 @@ class gail(object):
         #loss
         self.disc_loss_func = nn.BCELoss()
         if self.eval:
-            self.policy_net.load_state_dict(torch.load(f'./results/result_{self.seed}{self.alpha}_{self.beta}/models_{1}/policy_net.pkl'))
-            self.value_net.load_state_dict(torch.load(f'./results/result_{self.seed}_{self.alpha}_{self.beta}/models_{1}/policy_net.pkl'))
+            self.policy_net.load_state_dict(torch.load(f'./results/result_{self.seed}{self.noise}_{self.beta}/models_{1}/policy_net.pkl'))
+            self.value_net.load_state_dict(torch.load(f'./results/result_{self.seed}_{self.noise}_{self.beta}/models_{1}/policy_net.pkl'))
             for i in range(len(self.file)):
-                self.discriminator[i].load_state_dict(torch.load(f'./results/result_{self.seed}_{self.alpha}_{self.beta}/models_{1}/discriminator_{i}.pth'))
+                self.discriminator[i].load_state_dict(torch.load(f'./results/result_{self.seed}_{self.noise}_{self.beta}/models_{1}/discriminator_{i}.pth'))
 
 
 
@@ -271,7 +271,7 @@ class gail(object):
                 outputs = [self.discriminator[u].forward(pos, time, action, pre_pos_count, stay_time).item() for u in sample_result]
                 mean_std.append(outputs)
             value_c = (np.abs(np.random.laplace(0, self.noise*2, 1) + np.var(mean_std)))**0.5
-            reward = reward - self.beta * torch.from_numpy(value_c)
+            reward = torch.abs(reward - self.beta * torch.from_numpy(value_c))
             log_reward = - reward.log()
             all_result[i] = log_reward.detach().item()
         result_queue.put(all_result)
@@ -319,7 +319,7 @@ class gail(object):
                 t = next_t
                 if done:
                     break
-        np.savetxt(f'./results/result_{self.seed}_{self.alpha}_{self.beta}/evals/eval_{index}.txt',result, fmt = '%d')
+        np.savetxt(f'./results/result_{self.seed}_{self.noise}_{self.beta}/evals/eval_{index}.txt',result, fmt = '%d')
 
     def eval_data(self):
         self.eval_test(1)
@@ -366,9 +366,9 @@ class gail(object):
 
             if (i + 1) % self.model_save_interval == 0:
                 save_index = (i + 1) // self.model_save_interval
-                os.makedirs(f'./results/result_{self.seed}_{self.alpha}_{self.beta}/models_{save_index}', exist_ok=True)
-                torch.save(self.policy_net.state_dict(), f'./results/result_{self.seed}_{self.alpha}_{self.beta}/models_{save_index}/policy_net.pkl')
-                torch.save(self.value_net.state_dict(), f'./results/result_{self.seed}_{self.alpha}_{self.beta}/models_{save_index}/value_net.pkl')
+                os.makedirs(f'./results/result_{self.seed}_{self.noise}_{self.beta}/models_{save_index}', exist_ok=True)
+                torch.save(self.policy_net.state_dict(), f'./results/result_{self.seed}_{self.noise}_{self.beta}/models_{save_index}/policy_net.pkl')
+                torch.save(self.value_net.state_dict(), f'./results/result_{self.seed}_{self.noise}_{self.beta}/models_{save_index}/value_net.pkl')
                 for idx, item in enumerate(self.discriminator):
-                    torch.save(item.state_dict(), f'./results/result_{self.seed}_{self.alpha}_{self.beta}/models_{save_index}/discriminator_{idx}.pth')
+                    torch.save(item.state_dict(), f'./results/result_{self.seed}_{self.noise}_{self.beta}/models_{save_index}/discriminator_{idx}.pth')
                 self.eval_test(save_index)

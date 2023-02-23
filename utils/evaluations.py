@@ -504,7 +504,7 @@ if __name__ == "__main__":
         max_locs = 4210
     else:
         max_locs = 8606
-    results = glob.glob('../results/result_9999_50_0.01/evals/eval_*.txt')
+    results = glob.glob('../results/result_9999_50_0.01/evals/eval_6.txt')
     s_result = sorted(results, key=lambda x:int(x.split('/')[-1].split('_')[1].split('.')[0]))
     for result in s_result:
         gene_data = np.loadtxt(result).astype(int)

@@ -5,7 +5,7 @@ import argparse
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description='parameters of gail')
-    parser.add_argument('--seed',type=int, default= 666)
+    parser.add_argument('--seed',type=int, default= 9999)
     parser.add_argument('--beta', type = float, default= 0.01)
     parser.add_argument('--noise', type = float, default= 0.01)
     args = parser.parse_args()
