@@ -7,7 +7,7 @@ max_closest_rank: 200
 traj_length: 48
 
 # PPO
-episode: 500
+episode: 150
 capacity: 1000
 gamma: 0.99
 lam: 0.95

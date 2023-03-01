@@ -14,7 +14,7 @@ import torch.multiprocessing as mp
 from tqdm import tqdm
 from models.replay_buffer import replay_buffer
 from models.net import ATNetwork, Discriminator
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
 def set_seed(seed):
@@ -50,7 +50,7 @@ class gail(object):
         self.train_iter = self.config['train_iter']
         self.clip_grad = self.config['clip_grad']
         self.file = file
-        self.alpha = 50
+        self.alpha = 10
         self.beta = beta
         self.noise = noise
         self.action_dim = 4
@@ -264,7 +264,10 @@ class gail(object):
             total_reward = 0
             for j in range(len(self.file)):
                 total_reward += self.discriminator[j].forward(pos, time, action, pre_pos_count, stay_time)
-            reward = total_reward/len(self.file) + torch.from_numpy(np.random.laplace(0, self.noise, 1))
+            if self.noise == 0:
+                reward = total_reward/len(self.file)
+            else:
+                reward = total_reward/len(self.file) + torch.from_numpy(np.random.laplace(0, self.noise, 1))
             mean_std =  []
             for _ in range(200):
                 sample_result = random.sample(list(range(0,len(self.file))),self.alpha)
@@ -325,7 +328,7 @@ class gail(object):
         self.eval_test(1)
         
     def run(self):
-        # setproctitle.setproctitle('gail@gaochangzheng')
+        setproctitle.setproctitle('gail@gaochangzheng')
         set_seed(self.seed)
         reward_input_dict=dict()
         buffer_input_dict=dict()

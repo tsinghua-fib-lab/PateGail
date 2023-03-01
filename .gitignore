@@ -5,3 +5,12 @@
 *.pkl
 *.ipynb
 pre*
+/utils/evaluate1.py
+*.txt
+/utils/figs
+plot.py
+/da
+metric.py
+/utils/plot.py
+metric2.py
+/metrics

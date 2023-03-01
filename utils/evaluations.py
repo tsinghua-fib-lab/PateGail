@@ -495,6 +495,8 @@ def evaluate(datasets, gene_data):
 
 if __name__ == "__main__":
     # global
+    import random
+    random.seed(125)
     parser = argparse.ArgumentParser()
     parser.add_argument('--task',default='default', type=str)
     parser.add_argument('--cuda',default=0,type=int)
@@ -504,12 +506,18 @@ if __name__ == "__main__":
         max_locs = 4210
     else:
         max_locs = 8606
-    results = glob.glob('../results/result_9999_50_0.01/evals/eval_6.txt')
+    results = glob.glob('../results/result_9999_0.0_0.01/evals/eval_*.txt')
+    #s_result = ['../da/gene.data']
     s_result = sorted(results, key=lambda x:int(x.split('/')[-1].split('_')[1].split('.')[0]))
+    
+        
     for result in s_result:
         gene_data = np.loadtxt(result).astype(int)
         evaluate(opt.datasets, gene_data)
         print(result)
+    
+    
+    
     # print(max_locs)
     # # gene_data = np.load('./results/eval_3.1_50/eval_1.npy')
     # # print(gene_data.shape)
