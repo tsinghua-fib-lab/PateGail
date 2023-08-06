@@ -114,7 +114,8 @@ class IndividualEval(object):
         elif data == 'geolife':
             self.X, self.Y = get_gps('../dataset/geolife/gps')
             self.max_locs = 4210
-            self.max_distance = 6.886
+            self.max_distance = 2101.45
+            #self.max_distance = 6.886
    
 
     def get_topk_visits(self,trajs, k):
